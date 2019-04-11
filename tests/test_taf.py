@@ -17,14 +17,7 @@ from avwx import core, taf, structs, Taf
 
 class TestTaf(unittest.TestCase):
 
-    def test_fetch(self):
-        """
-        Tests if the old fetch function returns a report from a Service object
-        """
-        for station in ('KJFK', 'PHNL', 'EGLL', 'RKSI'):
-            report = taf.fetch(station)
-            self.assertIsInstance(report, str)
-            self.assertTrue(report.startswith(station) or report.startswith('AMD '+station))
+    maxDiff = None
 
     def test_parse(self):
         """
@@ -56,6 +49,29 @@ class TestTaf(unittest.TestCase):
         self.assertEqual(lines[4].probability, core.make_number('30'))
         self.assertTrue(lines[4].raw.startswith('PROB30'))
 
+    def test_prob_end(self):
+        """
+        PROB and TEMPO lines are discrete times and should not affect FROM times
+        """
+        report = ("MMMX 242331Z 2500/2606 24005KT P6SM VC RA SCT020CB SCT080 BKN200 TX25/2521Z TN14/2513Z "
+                  "TEMPO 2500/2504 6SM TSRA BKN020CB "
+                  "FM250600 04010KT P6SM SCT020 BKN080 "
+                  "TEMPO 2512/2515 3SM HZ BKN015 "
+                  "FM251600 22005KT 4SM HZ BKN020 "
+                  "FM251800 22010KT 6SM HZ SCT020 BKN200 "
+                  "PROB40 2522/2602 P6SM TSRA BKN020CB")
+        taf = Taf('CYBC')
+        taf.update(report)
+        lines = taf.data.forecast
+        self.assertEqual(lines[0].start_time.repr, '2500')
+        self.assertEqual(lines[0].end_time.repr, '2506')
+        self.assertEqual(lines[1].start_time.repr, '2500')
+        self.assertEqual(lines[1].end_time.repr, '2504')
+        self.assertEqual(lines[-2].start_time.repr, '2518')
+        self.assertEqual(lines[-2].end_time.repr, '2606')
+        self.assertEqual(lines[-1].start_time.repr, '2522')
+        self.assertEqual(lines[-1].end_time.repr, '2602')
+
     def test_wind_shear(self):
         """
         Wind shear should be recognized as its own element in addition to wind
@@ -81,16 +97,16 @@ class TestTaf(unittest.TestCase):
         report = ("EGLL 192253Z 2000/2106 28006KT 9999 BKN035 "
                   "PROB30 TEMPO 2004/2009 BKN012 "
                   "PROB30 TEMPO 2105/2106 8000 BKN006")
-        taf = Taf('EGLL')
-        taf.update(report)
-        lines = taf.data.forecast
+        tafobj = Taf('EGLL')
+        tafobj.update(report)
+        lines = tafobj.data.forecast
         for line in lines:
             self.assertIsInstance(line.start_time, structs.Timestamp)
             self.assertIsInstance(line.end_time, structs.Timestamp)
         for i in range(1, 3):
             self.assertEqual(lines[i].type, 'TEMPO')
             self.assertEqual(lines[i].probability.value, 30)
-    maxDiff = None
+
     def test_taf_ete(self):
         """
         Performs an end-to-end test of all TAF JSON files
@@ -114,3 +130,19 @@ class TestTaf(unittest.TestCase):
             self.assertEqual(station.summary, ref['summary'])
             self.assertEqual(nodate(station.speech), nodate(ref['speech']))
             self.assertEqual(asdict(station.station_info), ref['station_info'])
+
+    def test_rule_inherit(self):
+        """
+        Tests if TAF forecast periods selectively inherit features to calculate flight rules
+        """
+        report = (
+            "CYKF 020738Z 0208/0220 34005KT P6SM FEW015 BKN070 "
+            "FM020900 VRB03KT P6SM FEW070 SCT120 "
+            "BECMG 0214/0216 12006KT "
+            "FM021800 14008KT P6SM BKN025 OVC090"
+        )
+        expected_rules = ('VFR', 'VFR', 'VFR', 'MVFR',)
+        tafobj = Taf(report[:4])
+        tafobj.update(report)
+        for i, line in enumerate(tafobj.data.forecast):
+            self.assertEqual(line.flight_rules, expected_rules[i])

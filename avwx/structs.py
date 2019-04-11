@@ -3,11 +3,29 @@ Contains dataclasses to hold report data
 """
 
 # stdlib
+import json
+from copy import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from os import path
+# module
+from avwx.exceptions import BadStation
+
+
+_station_path = path.dirname(path.realpath(__file__)) + '/stations.json'
+STATIONS = json.load(open(_station_path))
+
 
 @dataclass
-class StationInfo(object):
+class Runway(object):
+    length: int
+    width: int
+    ident1: str
+    ident2: str
+
+
+@dataclass
+class Station(object):
     city: str
     country: str
     elevation: float
@@ -18,6 +36,19 @@ class StationInfo(object):
     name: str
     priority: int
     state: str
+    runways: [Runway]
+
+    @classmethod
+    def from_icao(cls, ident: str) -> 'Station':
+        """
+        Load a Station from an ICAO station ident
+        """
+        if not ident in STATIONS:
+            raise BadStation('Could not find station in the info dict. Check avwx.structs.STATIONS')
+        info = copy(STATIONS[ident])
+        if info['runways']:
+            info['runways'] = [Runway(**r) for r in info['runways']]
+        return cls(**info)
 
 
 @dataclass
@@ -55,6 +86,15 @@ class Cloud(object):
     type: str
     altitude: int
     modifier: str = None
+    direction: str = None
+
+
+@dataclass
+class Location(object):
+    repr: str
+    station: str
+    direction: Number
+    distance: Number
 
 
 @dataclass
@@ -66,9 +106,9 @@ class RemarksData(object):
 @dataclass
 class ReportData(object):
     raw: str
-    remarks: str
     station: str
     time: Timestamp
+    remarks: str
 
 
 @dataclass
@@ -146,3 +186,35 @@ class TafTrans(object):
     max_temp: str
     min_temp: str
     remarks: dict
+
+
+@dataclass
+class Turbulance(object):
+    severity: str
+    floor: Number = None
+    ceiling: Number = None
+
+
+@dataclass
+class Icing(Turbulance):
+    type: str = None
+
+
+@dataclass
+class PirepData(ReportData):
+    aircraft: str = None
+    altitude: Number = None
+    clouds: [Cloud] = None
+    flight_visibility: Number = None
+    icing: Icing = None
+    location: Location = None
+    sanitized: str = None
+    temperature: Number = None
+    turbulance: Turbulance = None
+    type: str = None
+    wx: [str] = None
+
+
+@dataclass
+class AirepData(ReportData):
+    pass

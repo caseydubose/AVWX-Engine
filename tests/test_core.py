@@ -163,7 +163,7 @@ class TestGlobal(BaseTest):
             ('This is weird', ('me', 'you', 'we'), 8),
             ('KJFK NOPE LOL RMK HAHAHA', static.METAR_RMK, 13)
         ):
-            self.assertEquals(core.find_first_in_list(string, targets), index)
+            self.assertEqual(core.find_first_in_list(string, targets), index)
 
     def test_extra_space_exists(self):
         """
@@ -239,7 +239,7 @@ class TestGlobal(BaseTest):
             self.assertEqual(retwx, ['1', '2'])
             self.assert_number(ret_temp, *temp)
             self.assert_number(ret_dew, *dew)
-        self.assertEquals(core.get_temp_and_dew(['MX/01']), (['MX/01'], None, None))
+        self.assertEqual(core.get_temp_and_dew(['MX/01']), (['MX/01'], None, None))
 
     def test_get_station_and_time(self):
         """
@@ -536,10 +536,18 @@ class TestTaf(unittest.TestCase):
         """
         Tests a function which checks that an item signifies a new time period
         """
-        for rtype in ('TEMPO', 'PROB30', 'PROBNA'):
-            self.assertTrue(core._is_tempo_or_prob(rtype))
-        for rtype in ('1', 'TEMPORARY', 'TEMP0', 'PROBABLY', 'PROB'):
-            self.assertFalse(core._is_tempo_or_prob(rtype))
+        for line in (
+            {'type': 'TEMPO'},
+            {'probability': 30},
+            {'probability': 'PROBNA'},
+            {'type': 'FROM', 'probability': 30},
+        ):
+            self.assertTrue(core._is_tempo_or_prob(line))
+        for line in (
+            {'type': 'FROM'},
+            {'type': 'FROM', 'probability': None},
+        ):
+            self.assertFalse(core._is_tempo_or_prob(line))
 
     def test_get_taf_alt_ice_turb(self):
         """
